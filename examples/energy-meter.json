@@ -1,0 +1,29 @@
+{
+  "name": "Smart Energy Meter",
+  "description": "Smart-grid metering: active power on a daily consumption curve, mains voltage/current around nominal, cumulative energy, and tariff band. Payload is AES-256-GCM encrypted before publishing to MQTT (set the METER_KEY env var to a base64 32-byte key).",
+  "sensors": [
+    {
+      "name": "meter-0007",
+      "interval_sec": 2,
+      "jitter_sec": 0.2,
+      "running": true,
+      "fields": [
+        { "type": "timestamp", "name": "ts", "fmt": "iso" },
+        { "type": "pattern_string", "name": "meter_id", "pattern": "SM-{d:6}" },
+        { "type": "sine_wave", "name": "active_power_kw", "amplitude": 3.5, "offset": 4.5, "period_sec": 240, "noise": 0.3, "decimals": 3 },
+        { "type": "gaussian_number", "name": "voltage_v", "mean": 230, "stddev": 2.5, "decimals": 1 },
+        { "type": "gaussian_number", "name": "current_a", "mean": 18, "stddev": 3, "min": 0, "decimals": 2 },
+        { "type": "enum", "name": "tariff", "values": ["peak", "flat", "valley"], "weights": [3, 4, 3] }
+      ],
+      "outputs": [
+        { "type": "screen", "enabled": true },
+        {
+          "type": "mqtt", "enabled": true, "host": "broker.hivemq.com", "port": 1883,
+          "topic": "iot/sim/energy/{sensor}",
+          "encryption": { "enabled": true, "algorithm": "AES-256-GCM", "key_env": "METER_KEY" }
+        }
+      ],
+      "anomaly": { "enabled": false, "probability": 0.05, "min_factor": 1.5, "max_factor": 3 }
+    }
+  ]
+}

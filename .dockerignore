@@ -1,0 +1,59 @@
+# Keep the build context small and free of anything sensitive or irrelevant.
+# Only app/, sample_data/, examples/ and requirements.txt need to reach the build.
+
+# VCS & CI
+.git
+.gitignore
+.github
+
+# Secrets / credentials — MUST never enter an image layer
+.env
+.env.*
+*.env
+secrets.yml
+secrets.yaml
+credentials.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+id_rsa
+id_ed25519
+.docker
+docker/config.json
+
+# Python caches / virtualenvs
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local tooling / editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Not needed inside the image (docs are synced to the registry from the repo;
+# tests/helm/build files are build/deploy-time only)
+tests/
+docs/
+helm/
+Dockerfile
+docker-compose*.yml
+Makefile
+pytest.ini
+requirements-dev.txt
+README.md
+CHANGELOG.md
+LICENSE
+*.log
+output/

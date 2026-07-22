@@ -1,0 +1,48 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "iot-simulator.fullname" . }}
+  labels:
+    {{- include "iot-simulator.labels" . | nindent 4 }}
+  annotations:
+    # ── cert-manager: automatic TLS certificate from Let's Encrypt ────────────
+    {{- if .Values.ingress.tls.certManager.enabled }}
+    {{- if eq .Values.ingress.tls.certManager.issuerKind "ClusterIssuer" }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.certManager.issuer | quote }}
+    {{- else }}
+    cert-manager.io/issuer: {{ .Values.ingress.tls.certManager.issuer | quote }}
+    {{- end }}
+    {{- end }}
+    # ── WebSocket support ─────────────────────────────────────────────────────
+    # The /ws endpoint uses long-lived connections; increase default timeouts so
+    # the proxy does not close the WebSocket connection after 60 s.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Disable response buffering so WebSocket frames reach the client immediately.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # ── User-defined annotations (from values.yaml ingress.annotations) ───────
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      # cert-manager stores the provisioned certificate in this secret.
+      secretName: {{ include "iot-simulator.fullname" . }}-tls
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "iot-simulator.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

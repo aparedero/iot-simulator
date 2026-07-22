@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="description" content="Configurable IoT device simulator with MQTT, Kafka and TCP/JSON outputs." />
+  <title>IoT Device Simulator</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+
+<!-- ════════════════════════════ TOPBAR ════════════════════════════ -->
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">◆</span>
+    <h1 data-i18n="app.title">IoT Device Simulator</h1>
+    <a class="brand-gh" href="https://github.com/aparedero" target="_blank"
+       rel="noopener noreferrer" aria-label="GitHub: aparedero">github.com/aparedero</a>
+  </div>
+  <nav class="topbar-actions">
+    <span class="metric" id="metric-running"></span>
+    <span class="metric" id="metric-msgs"></span>
+    <span class="ws-dot" id="wsStatus" data-i18n="ws.disconnected">disconnected</span>
+    <select id="lang" aria-label="Language" class="select-mini">
+      <option value="en">EN</option>
+      <option value="es">ES</option>
+    </select>
+    <button id="btnApiDocs" class="btn-icon-top" title="REST API Reference" aria-label="REST API Reference">API</button>
+    <button id="themeToggle" class="btn-icon-top" title="Toggle theme" aria-label="Toggle theme">◐</button>
+  </nav>
+</header>
+
+<!-- ════════════════════════════ WORKSPACE ════════════════════════════ -->
+<div class="workspace">
+
+  <!-- ─── Main scrollable area ─── -->
+  <main class="content">
+    <div class="toolbar">
+      <button id="btnNew"      class="btn-primary"  data-i18n="toolbar.new">+ New sensor</button>
+      <button id="btnExamples" class="btn-ghost"    data-i18n="toolbar.examples">★ Examples</button>
+      <button id="btnStartAll" class="btn-success"  data-i18n="toolbar.startAll">▶ Start all</button>
+      <button id="btnStopAll"  class="btn-danger"   data-i18n="toolbar.stopAll">■ Stop all</button>
+      <span class="tb-sep" aria-hidden="true"></span>
+      <button id="btnExport"   class="btn-ghost"    data-i18n="toolbar.export">⬇ Export</button>
+      <button id="btnImport"   class="btn-ghost"    data-i18n="toolbar.import">⬆ Import</button>
+      <input type="file" id="importFile" accept=".json,.yaml,.yml,application/json,application/x-yaml,text/yaml" hidden />
+      <button id="btnReload"   class="btn-ghost"    data-i18n="toolbar.reload">↻</button>
+      <span class="spacer"></span>
+      <input id="search" class="search" type="search"
+             data-i18n-placeholder="toolbar.search" placeholder="Search sensors…" />
+    </div>
+
+    <section id="sensors" class="grid" aria-live="polite"></section>
+  </main>
+
+  <!-- ─── Terminal log panel (always visible, pinned to bottom) ─── -->
+  <div class="terminal-panel" id="terminalPanel">
+    <!-- drag handle -->
+    <div class="term-resize" id="termResize" title="Drag to resize"></div>
+
+    <div class="term-titlebar">
+      <div class="term-dots" aria-hidden="true">
+        <span class="td td-red"></span>
+        <span class="td td-amber"></span>
+        <span class="td td-green"></span>
+      </div>
+      <span class="term-label" data-i18n="log.title">Real-time log</span>
+      <div class="term-controls">
+        <input id="logSearch" class="log-search" type="search"
+               data-i18n-placeholder="log.search" placeholder="filter log…" />
+        <select id="logFilter" class="select-mini term-select">
+          <option value="all"     data-i18n="log.all">all</option>
+          <option value="sample"  data-i18n="log.samples">samples</option>
+          <option value="ingress" data-i18n="log.ingress">ingress</option>
+          <option value="error"   data-i18n="log.errors">errors</option>
+          <option value="event"   data-i18n="log.events">events</option>
+        </select>
+        <label class="term-check">
+          <input type="checkbox" id="autoscroll" checked />
+          <span data-i18n="log.autoscroll">scroll</span>
+        </label>
+        <button id="btnClear" class="term-btn" data-i18n="log.clear">clear</button>
+      </div>
+      <a class="term-sig" href="https://github.com/aparedero" target="_blank"
+         rel="noopener noreferrer" aria-label="GitHub: aparedero">
+        ⌥ github.com/aparedero
+      </a>
+    </div>
+
+    <div class="log-body" id="log" role="log" aria-live="polite" aria-atomic="false"></div>
+  </div>
+</div>
+
+<!-- ════════════════════ SENSOR EDITOR MODAL ════════════════════ -->
+<div class="modal-bg" id="modalBg" role="dialog" aria-modal="true"
+     aria-labelledby="modalTitle" hidden>
+  <div class="modal">
+    <header class="modal-head">
+      <h2 id="modalTitle" data-i18n="modal.newTitle">New sensor</h2>
+      <button class="btn-icon" id="btnCancel" aria-label="Close">×</button>
+    </header>
+
+    <div class="modal-body">
+      <!-- Basic params -->
+      <div class="form-grid">
+        <label class="field col-2">
+          <span data-i18n="form.name">Name</span>
+          <input id="f-name" autocomplete="off" placeholder="temperature-1" />
+        </label>
+        <label class="field">
+          <span data-i18n="form.interval">Interval (s)</span>
+          <input id="f-interval" type="number" min="0.05" step="0.1" value="1" />
+        </label>
+        <label class="field">
+          <span data-i18n="form.jitter">Jitter (s)</span>
+          <input id="f-jitter" type="number" min="0" step="0.1" value="0" />
+        </label>
+        <label class="check-label col-2">
+          <input type="checkbox" id="f-running" checked />
+          <span data-i18n="form.startOnCreate">start on save</span>
+        </label>
+      </div>
+
+      <!-- Anomaly injection -->
+      <div class="anomaly-box">
+        <div class="anomaly-head">
+          <span class="anomaly-icon" aria-hidden="true">⚡</span>
+          <span class="anomaly-title" data-i18n="form.anomaly">Anomaly Injection</span>
+          <label class="check-label">
+            <input type="checkbox" id="f-anomaly-enabled" />
+            <span data-i18n="form.anomalyEnable">Enable</span>
+          </label>
+        </div>
+        <div class="anomaly-body">
+          <div class="form-grid anomaly-params">
+            <label class="field">
+              <span data-i18n="form.probability">Probability <small>(0–1)</small></span>
+              <input id="f-anomaly-prob" type="number" min="0" max="1" step="0.01" value="0.05" />
+            </label>
+            <label class="field">
+              <span data-i18n="form.minFactor">Min factor</span>
+              <input id="f-anomaly-min" type="number" min="0" step="0.1" value="1.5" />
+            </label>
+            <label class="field">
+              <span data-i18n="form.maxFactor">Max factor</span>
+              <input id="f-anomaly-max" type="number" min="0" step="0.1" value="3" />
+            </label>
+          </div>
+          <p class="hint" data-i18n="form.anomalyHint">
+            When triggered, a random numeric field is multiplied by a factor in the given range.
+            The payload gains an <code>_anomaly</code> key for downstream detection.
+          </p>
+        </div>
+      </div>
+
+      <!-- Fields -->
+      <div class="block">
+        <div class="block-head">
+          <h3 data-i18n="form.fields">Fields</h3>
+        </div>
+        <div class="add-bar">
+          <span class="add-bar-label" data-i18n="form.addField">Add:</span>
+          <button class="btn-add" data-add="timestamp">+ timestamp</button>
+          <button class="btn-add" data-add="random_number">+ random number</button>
+          <button class="btn-add" data-add="fixed_number">+ fixed number</button>
+          <button class="btn-add" data-add="gaussian_number">+ gaussian</button>
+          <button class="btn-add" data-add="random_walk">+ random walk</button>
+          <button class="btn-add" data-add="sine_wave">+ sine wave</button>
+          <button class="btn-add" data-add="boolean">+ boolean</button>
+          <button class="btn-add" data-add="enum">+ enum</button>
+          <button class="btn-add" data-add="random_string">+ random string</button>
+          <button class="btn-add" data-add="fixed_string">+ fixed string</button>
+          <button class="btn-add" data-add="pattern_string">+ pattern</button>
+          <button class="btn-add" data-add="uuid">+ uuid</button>
+          <button class="btn-add" data-add="geo_point">+ geo point</button>
+          <button class="btn-add" data-add="file">+ from file</button>
+        </div>
+        <div id="fields-container" class="block-list"></div>
+      </div>
+
+      <!-- Outputs -->
+      <div class="block">
+        <div class="block-head">
+          <h3 data-i18n="form.outputs">Outputs</h3>
+        </div>
+        <div class="add-bar">
+          <span class="add-bar-label" data-i18n="form.addOutput">Add:</span>
+          <button class="btn-add btn-add-screen" data-add-out="screen">+ screen</button>
+          <button class="btn-add btn-add-mqtt"   data-add-out="mqtt">+ MQTT</button>
+          <button class="btn-add btn-add-kafka"  data-add-out="kafka">+ Kafka</button>
+          <button class="btn-add btn-add-tcp"    data-add-out="tcp_json">+ TCP/JSON</button>
+          <button class="btn-add btn-add-http"   data-add-out="http">+ HTTP</button>
+          <button class="btn-add btn-add-amqp"   data-add-out="amqp">+ AMQP</button>
+          <button class="btn-add btn-add-coap"   data-add-out="coap">+ CoAP</button>
+          <button class="btn-add btn-add-file"   data-add-out="file_output">+ file</button>
+        </div>
+        <div id="outputs-container" class="block-list"></div>
+      </div>
+    </div><!-- /modal-body -->
+
+    <footer class="modal-foot">
+      <button class="btn-ghost" id="btnCancel2" data-i18n="form.cancel">Cancel</button>
+      <button class="btn-primary" id="btnSave" data-i18n="form.save">Save</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ════════════════════ API DOCS MODAL ════════════════════ -->
+<div class="modal-bg" id="apiModalBg" role="dialog" aria-modal="true"
+     aria-labelledby="apiModalTitle" hidden>
+  <div class="modal modal-wide">
+    <header class="modal-head">
+      <h2 id="apiModalTitle" data-i18n="api.title">REST API Reference</h2>
+      <button class="btn-icon" id="btnApiClose" aria-label="Close">×</button>
+    </header>
+    <div class="modal-body api-docs">
+
+      <div class="api-intro">
+        <p id="apiIntroText">Loading…</p>
+      </div>
+
+      <!-- Health -->
+      <details class="api-group" open>
+        <summary class="api-group-title"><span class="api-group-arrow">▶</span>Health &amp; Metrics</summary>
+        <div class="api-ep"><span class="badge get">GET</span><code>/api/health</code>
+          <p>Returns server status, version, uptime and sensor count.</p>
+          <pre class="api-ex">curl http://localhost:8000/api/health</pre>
+          <pre class="api-ex">{"status":"ok","version":"1.1.0","uptime_sec":42,"sensors":2,"max_sensors":100}</pre>
+        </div>
+        <div class="api-ep"><span class="badge get">GET</span><code>/api/metrics</code>
+          <p>Returns aggregate message/error counters and running count (JSON).</p>
+          <pre class="api-ex">curl http://localhost:8000/api/metrics</pre>
+        </div>
+        <div class="api-ep"><span class="badge get">GET</span><code>/metrics</code>
+          <p>Prometheus text exposition format for scraping / observability stacks.</p>
+          <pre class="api-ex">curl http://localhost:8000/metrics
+# iotsim_messages_total 1234
+# iotsim_sensors_running 3
+# iotsim_sensor_messages_total{sensor_id="a1b2",name="temp-01"} 512</pre>
+        </div>
+      </details>
+
+      <!-- Examples -->
+      <details class="api-group">
+        <summary class="api-group-title"><span class="api-group-arrow">▶</span>Example Scenarios</summary>
+        <div class="api-ep"><span class="badge get">GET</span><code>/api/examples</code>
+          <p>List bundled industry scenarios (smart building, GPS fleet, industrial machine, energy meter, air quality).</p>
+          <pre class="api-ex">curl http://localhost:8000/api/examples</pre>
+        </div>
+        <div class="api-ep"><span class="badge post">POST</span><code>/api/examples/{id}/import</code>
+          <p>Load a bundled scenario. Add <code>?replace=true</code> to wipe existing sensors first.</p>
+          <pre class="api-ex">curl -X POST http://localhost:8000/api/examples/smart-building/import</pre>
+        </div>
+      </details>
+
+      <!-- Sensors CRUD -->
+      <details class="api-group" open>
+        <summary class="api-group-title"><span class="api-group-arrow">▶</span>Sensors CRUD</summary>
+
+        <div class="api-ep"><span class="badge get">GET</span><code>/api/sensors</code>
+          <p>List all sensors with their current status.</p>
+          <pre class="api-ex">curl http://localhost:8000/api/sensors</pre>
+        </div>
+
+        <div class="api-ep"><span class="badge post">POST</span><code>/api/sensors</code>
+          <p>Create a new sensor. Returns 400 if name is duplicate or limit is reached.</p>
+          <pre class="api-ex">curl -X POST http://localhost:8000/api/sensors \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "temp-01",
+    "interval_sec": 1.0,
+    "jitter_sec": 0.2,
+    "running": true,
+    "fields": [
+      {"type":"timestamp","name":"ts","fmt":"iso"},
+      {"type":"random_number","name":"temperature","min":18,"max":26,"decimals":2},
+      {"type":"pattern_string","name":"device_id","pattern":"DEV-{d:4}-{seq}"}
+    ],
+    "outputs": [
+      {"type":"screen","enabled":true},
+      {"type":"mqtt","enabled":true,"host":"broker.hivemq.com","port":1883,"topic":"iot/sim/{sensor}"}
+    ],
+    "anomaly":{"enabled":false,"probability":0.05,"min_factor":1.5,"max_factor":3}
+  }'</pre>
+        </div>
+
+        <div class="api-ep"><span class="badge put">PUT</span><code>/api/sensors/{id}</code>
+          <p>Replace a sensor's configuration. Same body as POST.</p>
+          <pre class="api-ex">curl -X PUT http://localhost:8000/api/sensors/a1b2c3d4 \
+  -H "Content-Type: application/json" \
+  -d '{"name":"temp-01","interval_sec":2,"running":true,"fields":[...],"outputs":[...]}'</pre>
+        </div>
+
+        <div class="api-ep"><span class="badge del">DELETE</span><code>/api/sensors/{id}</code>
+          <p>Stop and delete a sensor. Returns 204.</p>
+          <pre class="api-ex">curl -X DELETE http://localhost:8000/api/sensors/a1b2c3d4</pre>
+        </div>
+      </details>
+
+      <!-- Lifecycle -->
+      <details class="api-group">
+        <summary class="api-group-title"><span class="api-group-arrow">▶</span>Sensor Lifecycle</summary>
+
+        <div class="api-ep"><span class="badge post">POST</span><code>/api/sensors/{id}/start</code>
+          <p>Start a stopped sensor.</p>
+          <pre class="api-ex">curl -X POST http://localhost:8000/api/sensors/a1b2c3d4/start</pre>
+        </div>
+        <div class="api-ep"><span class="badge post">POST</span><code>/api/sensors/{id}/stop</code>
+          <p>Stop a running sensor.</p>
+          <pre class="api-ex">curl -X POST http://localhost:8000/api/sensors/a1b2c3d4/stop</pre>
+        </div>
+        <div class="api-ep"><span class="badge post">POST</span><code>/api/sensors/{id}/clone</code>
+          <p>Deep-copy a sensor with a unique auto-generated name. Clone is created stopped.</p>
+          <pre class="api-ex">curl -X POST http://localhost:8000/api/sensors/a1b2c3d4/clone</pre>
+        </div>
+      </details>
+
+      <!-- Bulk -->
+      <details class="api-group">
+        <summary class="api-group-title"><span class="api-group-arrow">▶</span>Bulk Operations</summary>
+
+        <div class="api-ep"><span class="badge post">POST</span><code>/api/sensors/start-all</code>
+          <pre class="api-ex">curl -X POST http://localhost:8000/api/sensors/start-all
+# {"started":3,"total":3}</pre>
+        </div>
+        <div class="api-ep"><span class="badge post">POST</span><code>/api/sensors/stop-all</code>
+          <pre class="api-ex">curl -X POST http://localhost:8000/api/sensors/stop-all</pre>
+        </div>
+        <div class="api-ep"><span class="badge del">DELETE</span><code>/api/sensors</code>
+          <p>Stop and remove <strong>all</strong> sensors.</p>
+          <pre class="api-ex">curl -X DELETE http://localhost:8000/api/sensors</pre>
+        </div>
+      </details>
+
+      <!-- Import / Export -->
+      <details class="api-group">
+        <summary class="api-group-title"><span class="api-group-arrow">▶</span>Import / Export</summary>
+
+        <div class="api-ep"><span class="badge get">GET</span><code>/api/config/export</code>
+          <p>Download the current configuration. Add <code>?format=yaml</code> for YAML.</p>
+          <pre class="api-ex">curl http://localhost:8000/api/config/export -o config.json
+curl "http://localhost:8000/api/config/export?format=yaml" -o config.yaml</pre>
+        </div>
+
+        <div class="api-ep"><span class="badge post">POST</span><code>/api/config/import</code>
+          <p><code>replace: true</code> wipes existing sensors first. <code>false</code> merges (auto-renames conflicts).</p>
+          <pre class="api-ex">curl -X POST http://localhost:8000/api/config/import \
+  -H "Content-Type: application/json" \
+  -d '{
+    "replace": false,
+    "sensors": [ { "name":"imported-1", "interval_sec":1, ... } ]
+  }'</pre>
+        </div>
+
+        <div class="api-ep"><span class="badge post">POST</span><code>/api/config/import-raw</code>
+          <p>Import a raw JSON <strong>or</strong> YAML document (auto-detected). Add <code>?replace=true</code> to wipe first.</p>
+          <pre class="api-ex">curl -X POST "http://localhost:8000/api/config/import-raw?replace=true" \
+  -H "Content-Type: text/plain" --data-binary @config.yaml</pre>
+        </div>
+      </details>
+
+      <!-- WebSocket -->
+      <details class="api-group">
+        <summary class="api-group-title"><span class="api-group-arrow">▶</span>WebSocket  /ws</summary>
+        <div class="api-ep">
+          <p>Connect to <code>ws://&lt;host&gt;:8000/ws</code>. The server pushes JSON events.
+          The last 200 events are replayed on connect.</p>
+          <pre class="api-ex">// Event shapes:
+{"type":"sample","sensor_id":"…","sensor_name":"…","payload":{…},"targets":[…],"count":42,"errors":0}
+{"type":"created","sensor_id":"…","sensor_name":"…"}
+{"type":"updated","sensor_id":"…","sensor_name":"…"}
+{"type":"deleted","sensor_id":"…","sensor_name":"…"}
+{"type":"error","sensor_id":"…","sensor_name":"…","message":"…"}
+{"type":"ingress","source":"tcp:1.2.3.4:5050","payload":{…}}</pre>
+          <pre class="api-ex">// JavaScript example:
+const ws = new WebSocket("ws://localhost:8000/ws");
+ws.onmessage = (e) => console.log(JSON.parse(e.data));</pre>
+        </div>
+      </details>
+
+      <!-- TCP ingress -->
+      <details class="api-group">
+        <summary class="api-group-title"><span class="api-group-arrow">▶</span>TCP/JSON Ingress  :5050</summary>
+        <div class="api-ep">
+          <p>Send newline-delimited JSON to port 5050; events appear in the live log.</p>
+          <pre class="api-ex">echo '{"sensor":"ext-01","value":42}' | nc localhost 5050</pre>
+        </div>
+      </details>
+
+      <!-- Field types reference -->
+      <details class="api-group">
+        <summary class="api-group-title"><span class="api-group-arrow">▶</span>Field Types Quick Reference</summary>
+        <div class="api-ep">
+          <pre class="api-ex">{"type":"timestamp",      "name":"ts",   "fmt":"iso"}          // iso | epoch_ms | epoch_s
+{"type":"fixed_number",   "name":"x",    "value":42}
+{"type":"random_number",  "name":"t",    "min":0,"max":100,"decimals":2}
+{"type":"fixed_string",   "name":"s",    "value":"ok"}
+{"type":"random_string",  "name":"tok",  "length":8,"charset":"alnum"}
+{"type":"pattern_string", "name":"id",   "pattern":"DEV-{d:4}-{seq}"}
+{"type":"file",           "name":"loc",  "path":"/app/sample_data/locations.txt","mode":"loop"}
+{"type":"gaussian_number","name":"r",    "mean":20,"stddev":2,"decimals":2,"min":null,"max":null}
+{"type":"random_walk",    "name":"lvl",  "start":50,"step":1,"min":0,"max":100,"decimals":2}
+{"type":"sine_wave",      "name":"cyc",  "amplitude":10,"offset":20,"period_sec":60,"phase":0,"noise":0}
+{"type":"boolean",        "name":"flag", "p_true":0.5}
+{"type":"enum",           "name":"st",   "values":["ok","warn","fault"],"weights":[8,1,1]}
+{"type":"uuid",           "name":"uuid"}
+{"type":"geo_point",      "name":"loc",  "lat":40.4168,"lon":-3.7038,"radius_m":500,"decimals":6}
+
+// Pattern tokens: {d:N} digits · {a:N} letters · {h:N} hex · {choice:a|b|c} · {seq} counter</pre>
+        </div>
+      </details>
+
+      <!-- Output types reference -->
+      <details class="api-group">
+        <summary class="api-group-title"><span class="api-group-arrow">▶</span>Output Types &amp; Encryption</summary>
+        <div class="api-ep">
+          <pre class="api-ex">{"type":"screen",  "enabled":true}
+{"type":"mqtt",    "enabled":true,"host":"broker.hivemq.com","port":1883,"topic":"iot/sim/{sensor}","qos":0,"tls":false}
+{"type":"kafka",   "enabled":true,"bootstrap_servers":"localhost:9092","topic":"iot-sim","key_field":"device_id"}
+{"type":"tcp_json","enabled":true,"host":"127.0.0.1","port":5050}
+{"type":"file_output","enabled":true,"path":"/app/output/s.jsonl","mode":"append","format":"jsonl"}
+{"type":"http",    "enabled":true,"url":"https://collector/ingest","method":"POST","bearer_token":"...","verify_tls":true}
+{"type":"amqp",    "enabled":true,"url":"amqp://guest:guest@localhost:5672/","exchange":"","routing_key":"iot.sim.{sensor}"}
+{"type":"coap",    "enabled":true,"uri":"coap://localhost:5683/ingest","method":"POST"}
+
+// Any transport output may add optional AES-256-GCM payload encryption:
+{"type":"mqtt", "...":"...", "encryption":{"enabled":true,"algorithm":"AES-256-GCM","key_env":"METER_KEY"}}
+// key_env  -> read base64 32-byte key from an environment variable (recommended)
+// key_b64  -> inline base64 32-byte key
+// Envelope: {"enc":"AES-256-GCM","iv":"..","ct":"..","tag":"..","aad":"<sensor>"}</pre>
+        </div>
+      </details>
+
+    </div><!-- /api-docs -->
+    <footer class="modal-foot">
+      <a href="/docs" target="_blank" class="btn-ghost" data-i18n="api.swagger">Open Swagger UI ↗</a>
+      <button class="btn-primary" id="btnApiClose2" data-i18n="form.cancel">Close</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ════════════════════ EXAMPLES MODAL ════════════════════ -->
+<div class="modal-bg" id="examplesModalBg" role="dialog" aria-modal="true"
+     aria-labelledby="examplesModalTitle" hidden>
+  <div class="modal">
+    <header class="modal-head">
+      <h2 id="examplesModalTitle" data-i18n="examples.title">Example scenarios</h2>
+      <button class="btn-icon" id="btnExamplesClose" aria-label="Close">×</button>
+    </header>
+    <div class="modal-body">
+      <p class="hint" data-i18n="examples.hint">
+        Ready-to-run industry scenarios. Loading one adds its sensors to the
+        current simulation (names are auto-suffixed on conflict).
+      </p>
+      <div id="examplesList" class="examples-list"></div>
+    </div>
+    <footer class="modal-foot">
+      <button class="btn-primary" id="btnExamplesClose2" data-i18n="form.cancel">Close</button>
+    </footer>
+  </div>
+</div>
+
+<script type="module" src="/static/i18n.js"></script>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

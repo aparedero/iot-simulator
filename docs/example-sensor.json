@@ -1,0 +1,18 @@
+{
+  "name": "temperature-1",
+  "interval_sec": 1,
+  "jitter_sec": 0.2,
+  "running": true,
+  "fields": [
+    { "type": "timestamp", "name": "ts", "fmt": "iso" },
+    { "type": "random_number", "name": "temperature", "min": 18, "max": 26, "decimals": 2 },
+    { "type": "random_number", "name": "humidity", "min": 30, "max": 80, "decimals": 1 },
+    { "type": "pattern_string", "name": "device_id", "pattern": "DEV-{d:4}-{seq}" },
+    { "type": "file", "name": "location", "path": "/app/sample_data/locations.txt", "mode": "random" }
+  ],
+  "outputs": [
+    { "type": "screen", "enabled": true },
+    { "type": "mqtt", "enabled": true, "host": "broker.hivemq.com", "port": 1883, "topic": "iot/sim/{sensor}" }
+  ],
+  "anomaly": { "enabled": true, "probability": 0.05, "min_factor": 1.5, "max_factor": 3 }
+}

@@ -1,0 +1,27 @@
+apiVersion: v2
+name: iot-simulator
+description: >
+  Configurable IoT device simulator with a real-time web UI.
+  Generates realistic device payloads and pushes them to screen, MQTT, Kafka,
+  TCP/JSON, file, HTTP, AMQP and CoAP targets, with optional AES-256-GCM payload
+  encryption. Runs as a single container.
+type: application
+# Chart version — increment on every values/template change.
+version: 0.2.0
+# Application version — must match the Docker image tag.
+appVersion: "1.2.0"
+keywords:
+  - iot
+  - simulator
+  - mqtt
+  - kafka
+  - amqp
+  - coap
+  - fastapi
+  - websocket
+home: https://github.com/aparedero/iot-python
+sources:
+  - https://github.com/aparedero/iot-python
+maintainers:
+  - name: aparedero
+    url: https://github.com/aparedero

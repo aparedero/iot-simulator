@@ -1,0 +1,25 @@
+{
+  "name": "Industrial Machine (Predictive Maintenance)",
+  "description": "Rotating-equipment telemetry for predictive-maintenance pipelines: RPM (periodic), bearing vibration and temperature that drift, and a machine state. Anomaly injection is ON to exercise alerting. Streamed to Kafka.",
+  "sensors": [
+    {
+      "name": "pump-A1",
+      "interval_sec": 0.5,
+      "jitter_sec": 0,
+      "running": true,
+      "fields": [
+        { "type": "timestamp", "name": "ts", "fmt": "iso" },
+        { "type": "fixed_string", "name": "line", "value": "assembly-3" },
+        { "type": "sine_wave", "name": "rpm", "amplitude": 50, "offset": 1450, "period_sec": 120, "noise": 5, "decimals": 0 },
+        { "type": "gaussian_number", "name": "vibration_mm_s", "mean": 2.5, "stddev": 0.4, "min": 0, "decimals": 3 },
+        { "type": "random_walk", "name": "bearing_temp_c", "start": 55, "step": 0.8, "min": 20, "max": 120, "decimals": 1 },
+        { "type": "enum", "name": "state", "values": ["running", "warning", "fault"], "weights": [90, 8, 2] }
+      ],
+      "outputs": [
+        { "type": "screen", "enabled": true },
+        { "type": "kafka", "enabled": true, "bootstrap_servers": "localhost:9092", "topic": "iot-machines", "key_field": "line" }
+      ],
+      "anomaly": { "enabled": true, "probability": 0.05, "min_factor": 1.8, "max_factor": 4 }
+    }
+  ]
+}

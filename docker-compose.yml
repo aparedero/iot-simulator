@@ -1,0 +1,14 @@
+services:
+  iot-sim:
+    build: .
+    container_name: iot-sim
+    ports:
+      - "8000:8000"   # Web UI + REST + WebSocket
+      - "5050:5050"   # TCP/JSON ingress
+    environment:
+      LISTEN_HOST: "0.0.0.0"
+      LISTEN_PORT: "5050"
+      LOG_LEVEL: "INFO"
+    volumes:
+      - ./sample_data:/app/sample_data:ro
+    restart: unless-stopped

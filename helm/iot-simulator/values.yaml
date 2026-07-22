@@ -1,0 +1,227 @@
+# 
+# IoT Device Simulator — Helm values
+#
+# Quick deploy (minimum required change — set your domain):
+#
+#   helm install iot-sim ./helm/iot-simulator \
+#     --namespace iot-sim --create-namespace \
+#     --set ingress.host=iot.example.com
+#
+# See README.md § "Kubernetes (Helm)" for the full deployment guide including
+# NGINX Ingress Controller and Let's Encrypt prerequisites.
+# 
+
+
+#  Image 
+image:
+  # Container registry and image path.
+  # Build and push your own image:
+  #   docker build -t myregistry/iot-simulator:1.2.0 .
+  #   docker push myregistry/iot-simulator:1.2.0
+  # Then set:  --set image.repository=myregistry/iot-simulator
+  repository: docker.io/paredero/iot-simulator
+
+  # Image tag. Defaults to Chart.AppVersion when left empty.
+  # Pin to a specific digest in production:
+  #   tag: "1.1.0@sha256:abc123..."
+  tag: ""
+
+  # IfNotPresent is safe for pinned tags and avoids unnecessary pulls.
+  # Use Always when testing a mutable tag such as "latest" or "dev".
+  pullPolicy: IfNotPresent
+
+# Pull secrets for private registries.
+# Create the secret first, then reference it here:
+#   kubectl create secret docker-registry regcred \
+#     --docker-server=ghcr.io \
+#     --docker-username=<user> \
+#     --docker-password=<personal-access-token>
+imagePullSecrets: []
+# - name: regcred
+
+# Optional name overrides. Leave empty to use Helm release defaults.
+nameOverride: ""
+fullnameOverride: ""
+
+
+#  Replicas 
+# The simulator holds all sensor state in memory. More than one replica means
+# each pod has independent state — sensors configured in pod A are invisible
+# to pod B. Keep at 1 unless you implement external state sharing.
+replicaCount: 1
+
+
+#  Application configuration 
+config:
+  # Network interface the internal TCP/JSON ingress listener binds to.
+  # "0.0.0.0" listens on all interfaces inside the container.
+  listenHost: "0.0.0.0"
+
+  # Port for the TCP/JSON ingress listener (receives newline-delimited JSON).
+  # Set to "0" to disable the TCP listener entirely and reduce the attack surface.
+  listenPort: "5050"
+
+  # Python logging verbosity: DEBUG | INFO | WARNING | ERROR | CRITICAL
+  # Use DEBUG only during development — it is very verbose.
+  logLevel: "INFO"
+
+
+#  Service 
+service:
+  # Service type:
+  #   ClusterIP    — internal only; access via Ingress (recommended for production)
+  #   LoadBalancer — cloud provider allocates an external IP; no Ingress needed
+  #   NodePort     — exposes a static port on each node (bare-metal without LB)
+  type: ClusterIP
+
+  # Port exposed for the Web UI, REST API, and WebSocket (/ws).
+  port: 8000
+
+  # Port exposed for the TCP/JSON ingress listener.
+  tcpPort: 5050
+
+  # Set to false to omit the TCP port from the Service manifest entirely.
+  # Useful when listenPort is "0" or you do not need external TCP ingress.
+  tcpEnabled: true
+
+
+#  Ingress 
+# Creates a Kubernetes Ingress resource.
+# Prerequisites — install once per cluster (see README.md):
+#   • NGINX Ingress Controller
+#   • cert-manager + a ClusterIssuer (for Let's Encrypt TLS)
+ingress:
+  # Toggle the entire Ingress resource.
+  # Set to false and use service.type=LoadBalancer or port-forward instead.
+  enabled: true
+
+  # IngressClass name. Matches the controller you have installed.
+  # "nginx" — community NGINX Ingress Controller (most common)
+  # "nginx" — also used by the AWS/GCP managed NGINX offerings
+  # "traefik" — if you use Traefik instead
+  className: nginx
+
+  # ⚠ REQUIRED: change this to your real public domain before deploying.
+  # DNS must already point to your Ingress Controller's external IP.
+  host: iot-sim.example.com
+
+  tls:
+    # Terminate HTTPS at the Ingress. Strongly recommended for production.
+    # cert-manager will provision and renew the certificate automatically.
+    enabled: true
+
+    certManager:
+      # Set to true to add cert-manager annotations so a certificate is
+      # automatically requested from Let's Encrypt when the Ingress is created.
+      enabled: true
+
+      # Name of the cert-manager Issuer or ClusterIssuer resource.
+      # Must exist before running helm install. See README.md § Let's Encrypt.
+      # Use "letsencrypt-staging" first to avoid rate-limit issues while testing.
+      issuer: letsencrypt-prod
+
+      # "ClusterIssuer" — cluster-scoped (works across namespaces, recommended)
+      # "Issuer"        — namespace-scoped (must be in the same namespace)
+      issuerKind: ClusterIssuer
+
+  # Extra Ingress annotations merged on top of the defaults.
+  # The chart already adds WebSocket timeout and proxy buffering annotations.
+  # Common additions:
+  #   nginx.ingress.kubernetes.io/limit-rps: "30"          # rate limiting
+  #   nginx.ingress.kubernetes.io/auth-type: basic          # basic auth
+  #   nginx.ingress.kubernetes.io/auth-secret: iot-auth     # htpasswd secret
+  #   nginx.ingress.kubernetes.io/proxy-body-size: "10m"   # larger imports
+  annotations: {}
+
+
+#  Resources 
+# Baseline sizing for the simulator container.
+# Each active sensor is a lightweight asyncio task (~1 MB RAM at rest).
+# 100 active sensors with 1-second intervals consume roughly 50–80 MB.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    # Raise cpu if sensors are generating > 10 k messages/second.
+    cpu: 500m
+    # Raise memory if you run many sensors with large payloads.
+    memory: 256Mi
+
+
+#  Autoscaling (HPA) 
+# NOT recommended without external state persistence.
+# If enabled, each replica maintains independent in-memory sensor state.
+# Only enable if sensors are always imported from a config file on startup.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  # Scale out when average CPU usage exceeds this percentage.
+  targetCPUUtilizationPercentage: 80
+  # Uncomment to also scale on memory:
+  # targetMemoryUtilizationPercentage: 80
+
+
+#  Persistence 
+# Optional PersistentVolumeClaim for sensors that use the "file_output" target.
+# Not needed for screen / MQTT / Kafka / TCP outputs.
+persistence:
+  # Enable to create a PVC and mount it in the container.
+  enabled: false
+
+  # Storage class. Leave empty to use the cluster default ("standard", "gp2", etc.)
+  # Examples: "premium-rwo" (GKE), "managed-premium" (AKS), "local-path" (k3s)
+  storageClass: ""
+
+  # Requested volume size.
+  size: 1Gi
+
+  # ReadWriteOnce is sufficient for a single replica.
+  accessMode: ReadWriteOnce
+
+  # Mount path inside the container.
+  # Use this prefix when configuring "file_output" sensor paths.
+  # Example sensor output path: /app/output/temperature.jsonl
+  mountPath: /app/output
+
+
+#  Pod security context
+# Applied at the Pod level — affects all containers.
+# The uid/gid below match the non-root "app" user baked into the image
+# (uid 10001), so file ownership and the file_output target line up.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  # fsGroup ensures the mounted PVC is writable by the app user.
+  fsGroup: 10001
+
+#  Container security context 
+# Applied to the main application container.
+securityContext:
+  allowPrivilegeEscalation: false
+  # Set to true for a tighter security posture when file_output is not used.
+  # Must be false if sensors write to local files (file_output target).
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+
+#  Scheduling 
+# Pin the pod to specific nodes (e.g. nodes with the label "workload=iot"):
+#   nodeSelector:
+#     workload: iot
+nodeSelector: {}
+
+# Allow the pod to be scheduled on tainted nodes:
+#   tolerations:
+#     - key: "dedicated"
+#       operator: "Equal"
+#       value: "iot"
+#       effect: "NoSchedule"
+tolerations: []
+
+# Advanced pod placement rules (anti-affinity, topology spread, etc.)
+affinity: {}
