@@ -1,0 +1,37 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  IoT Device Simulator  v{{ .Chart.AppVersion }}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Port standard (docs/PORTS.md):
+
+  HTTP / WS / ingest   {{ .Values.service.port }}  (NodePort {{ .Values.service.nodePort }})
+  TCP/JSON ingress     {{ .Values.service.tcpPort }}  (NodePort {{ .Values.service.tcpNodePort }})
+  CoAP UDP ingest      {{ .Values.service.coapPort }}  (NodePort {{ .Values.service.coapNodePort }})
+
+{{- if .Values.ingress.enabled }}
+
+Web UI:     {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}
+REST API:   {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}/api
+WebSocket:  {{ if .Values.ingress.tls.enabled }}wss{{ else }}ws{{ end }}://{{ .Values.ingress.host }}/ws
+
+{{- else }}
+
+Service type is {{ .Values.service.type }}.
+
+  kubectl get svc -n {{ .Release.Namespace }} {{ include "iot-simulator.fullname" . }}
+
+  kubectl port-forward -n {{ .Release.Namespace }} \
+    svc/{{ include "iot-simulator.fullname" . }} 8000:{{ .Values.service.port }} 5050:{{ .Values.service.tcpPort }}
+
+  Then open: http://localhost:8000
+
+{{- end }}
+
+Check pods:
+
+  kubectl get pods -n {{ .Release.Namespace }} \
+    -l "app.kubernetes.io/name={{ include "iot-simulator.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+Uninstall:
+
+  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}

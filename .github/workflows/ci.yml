@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.14", "3.15"]
+    env:
+      LISTEN_PORT: "0"
+      COAP_LISTEN_PORT: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Byte-compile
+        run: python -m compileall -q app
+
+      - name: Run test suite
+        run: pytest -q
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: docker build -t iot-simulator:ci .
+
+      - name: Smoke-test the image
+        run: |
+          docker run -d --name iotsim -p 8000:8000 -e LISTEN_PORT=0 iot-simulator:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/api/health; then ok=1; break; fi
+            sleep 1
+          done
+          test "${ok:-0}" = "1" || { echo "health check failed"; docker logs iotsim; exit 1; }
+          curl -sf http://localhost:8000/api/examples | grep -q smart-building
+          curl -sf http://localhost:8000/api/runtime | grep -q tcp_json
+          docker rm -f iotsim

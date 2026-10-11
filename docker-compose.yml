@@ -1,0 +1,102 @@
+# IoT Device Simulator — lab stack
+#
+# Port standard (see docs/PORTS.md):
+#   8000  TCP  Web UI, REST, WebSocket, HTTP ingest
+#   5050  TCP  JSON-lines ingress
+#   1883  TCP  MQTT
+#   9092  TCP  Kafka (host) / 9092 internal
+#   5672  TCP  AMQP
+#   15672 TCP  RabbitMQ management
+#   5683  UDP  CoAP
+#
+# Start everything:
+#   docker compose up --build
+#
+# Simulator only (no brokers):
+#   docker compose up --build --no-deps iot-sim
+
+name: iot-simulator
+
+services:
+  iot-sim:
+    build: .
+    image: iot-simulator:local
+    container_name: iot-sim
+    ports:
+      - "8000:8000"
+      - "5050:5050"
+      - "5683:5683/udp"
+    environment:
+      LISTEN_HOST: "0.0.0.0"
+      LISTEN_PORT: "5050"
+      COAP_LISTEN_PORT: "5683"
+      LOG_LEVEL: "INFO"
+      IOTSIM_MQTT_HOST: mqtt
+      IOTSIM_MQTT_PORT: "1883"
+      IOTSIM_KAFKA_BOOTSTRAP: kafka:9092
+      IOTSIM_AMQP_URL: amqp://iot:iot@amqp:5672/
+      IOTSIM_COAP_URI: coap://127.0.0.1:5683/ingest
+      IOTSIM_HTTP_INGEST_URL: http://127.0.0.1:8000/api/ingest
+      IOTSIM_TCP_JSON_HOST: 127.0.0.1
+      IOTSIM_TCP_JSON_PORT: "5050"
+      IOTSIM_REWRITE_EXAMPLE_HOSTS: "1"
+      IOTSIM_FILE_FIELD_ROOT: /app/sample_data
+      IOTSIM_FILE_OUTPUT_ROOT: /app/output
+      # Lab-only AES key for the energy-meter example. Replace before any shared use.
+      METER_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    volumes:
+      - ./sample_data:/app/sample_data:ro
+      - sim-output:/app/output
+    depends_on:
+      mqtt:
+        condition: service_started
+      kafka:
+        condition: service_started
+      amqp:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2).status==200 else 1)"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: iot-sim-mqtt
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
+  kafka:
+    image: redpandadata/redpanda:v24.3.6
+    container_name: iot-sim-kafka
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=512M
+      - --overprovisioned
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://kafka:9092,external://localhost:19092
+    ports:
+      - "9092:19092"
+    restart: unless-stopped
+
+  amqp:
+    image: rabbitmq:3.13-management-alpine
+    container_name: iot-sim-amqp
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: iot
+      RABBITMQ_DEFAULT_PASS: iot
+    restart: unless-stopped
+
+volumes:
+  sim-output:

@@ -1,0 +1,26 @@
+{
+  "name": "Smart Building",
+  "description": "HVAC/BMS telemetry: temperature follows a daily sine cycle, humidity and CO2 drift realistically, plus occupancy and room state. Published to screen + MQTT.",
+  "sensors": [
+    {
+      "name": "room-101",
+      "interval_sec": 2,
+      "jitter_sec": 0.5,
+      "running": true,
+      "fields": [
+        { "type": "timestamp", "name": "ts", "fmt": "iso" },
+        { "type": "pattern_string", "name": "device_id", "pattern": "BMS-{d:4}" },
+        { "type": "sine_wave", "name": "temperature_c", "amplitude": 3, "offset": 21.5, "period_sec": 300, "noise": 0.2, "decimals": 2 },
+        { "type": "gaussian_number", "name": "humidity_pct", "mean": 45, "stddev": 5, "min": 20, "max": 80, "decimals": 1 },
+        { "type": "random_walk", "name": "co2_ppm", "start": 600, "step": 25, "min": 400, "max": 2000, "decimals": 0 },
+        { "type": "boolean", "name": "occupied", "p_true": 0.6 },
+        { "type": "enum", "name": "hvac_state", "values": ["idle", "cooling", "heating"], "weights": [5, 3, 2] }
+      ],
+      "outputs": [
+        { "type": "screen", "enabled": true },
+        { "type": "mqtt", "enabled": true, "host": "broker.hivemq.com", "port": 1883, "topic": "iot/sim/building/{sensor}" }
+      ],
+      "anomaly": { "enabled": true, "probability": 0.02, "min_factor": 1.5, "max_factor": 2.5 }
+    }
+  ]
+}

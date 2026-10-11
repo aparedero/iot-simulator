@@ -1,0 +1,10 @@
+building-A
+building-B
+building-C
+warehouse-1
+warehouse-2
+office-1
+office-2
+factory-floor-1
+factory-floor-2
+parking-lot

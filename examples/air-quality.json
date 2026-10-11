@@ -1,0 +1,27 @@
+{
+  "name": "Air Quality Station",
+  "description": "Environmental monitoring: particulate matter, gases and an AQI category from a fixed outdoor station. Sent over CoAP (constrained-device protocol) and mirrored to screen.",
+  "sensors": [
+    {
+      "name": "aq-station-01",
+      "interval_sec": 3,
+      "jitter_sec": 1,
+      "running": true,
+      "fields": [
+        { "type": "timestamp", "name": "ts", "fmt": "iso" },
+        { "type": "fixed_string", "name": "station", "value": "madrid-centro" },
+        { "type": "geo_point", "name": "location", "lat": 40.4168, "lon": -3.7038, "radius_m": 5, "decimals": 6 },
+        { "type": "random_walk", "name": "pm25_ugm3", "start": 12, "step": 2, "min": 0, "max": 250, "decimals": 1 },
+        { "type": "random_walk", "name": "pm10_ugm3", "start": 20, "step": 3, "min": 0, "max": 400, "decimals": 1 },
+        { "type": "gaussian_number", "name": "no2_ppb", "mean": 25, "stddev": 8, "min": 0, "decimals": 1 },
+        { "type": "gaussian_number", "name": "o3_ppb", "mean": 40, "stddev": 12, "min": 0, "decimals": 1 },
+        { "type": "enum", "name": "aqi_category", "values": ["good", "moderate", "unhealthy"], "weights": [6, 3, 1] }
+      ],
+      "outputs": [
+        { "type": "screen", "enabled": true },
+        { "type": "coap", "enabled": true, "uri": "coap://localhost:5683/ingest", "method": "POST" }
+      ],
+      "anomaly": { "enabled": true, "probability": 0.03, "min_factor": 2, "max_factor": 5 }
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "iot-simulator.fullname" . }}
+  labels:
+    {{- include "iot-simulator.labels" . | nindent 4 }}
+spec:
+  # Sensor state is in-memory — do not increase replicas without an external
+  # state store, as each pod would have independent, unsynchronised state.
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "iot-simulator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "iot-simulator.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "iot-simulator.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+            {{- if and .Values.service.tcpEnabled (gt (int .Values.config.listenPort) 0) }}
+            - name: tcp-json
+              containerPort: {{ int .Values.config.listenPort }}
+              protocol: TCP
+            {{- end }}
+            {{- if and .Values.service.coapEnabled (gt (int .Values.config.coapListenPort) 0) }}
+            - name: coap
+              containerPort: {{ int .Values.config.coapListenPort }}
+              protocol: UDP
+            {{- end }}
+          env:
+            - name: LISTEN_HOST
+              value: {{ .Values.config.listenHost | quote }}
+            - name: LISTEN_PORT
+              value: {{ .Values.config.listenPort | quote }}
+            - name: COAP_LISTEN_PORT
+              value: {{ .Values.config.coapListenPort | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: IOTSIM_MQTT_HOST
+              value: {{ .Values.config.mqttHost | quote }}
+            - name: IOTSIM_MQTT_PORT
+              value: {{ .Values.config.mqttPort | quote }}
+            - name: IOTSIM_KAFKA_BOOTSTRAP
+              value: {{ .Values.config.kafkaBootstrap | quote }}
+            - name: IOTSIM_AMQP_URL
+              value: {{ .Values.config.amqpUrl | quote }}
+            - name: IOTSIM_COAP_URI
+              value: {{ .Values.config.coapUri | quote }}
+            - name: IOTSIM_HTTP_INGEST_URL
+              value: {{ .Values.config.httpIngestUrl | quote }}
+            - name: IOTSIM_REWRITE_EXAMPLE_HOSTS
+              value: {{ .Values.config.rewriteExampleHosts | quote }}
+            - name: IOTSIM_FILE_FIELD_ROOT
+              value: "/app/sample_data"
+            - name: IOTSIM_FILE_OUTPUT_ROOT
+              value: {{ .Values.persistence.mountPath | quote }}
+          # Health probes use the /api/health endpoint that returns 200 when the
+          # FastAPI application and asyncio event loop are fully initialised.
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 2
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: output
+              mountPath: {{ .Values.persistence.mountPath }}
+          {{- end }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: output
+          persistentVolumeClaim:
+            claimName: {{ include "iot-simulator.fullname" . }}-output
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
